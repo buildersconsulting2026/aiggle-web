@@ -6,6 +6,7 @@ import { MainContent } from './components/MainContent';
 import { ChatMain } from './components/ChatMain';
 import { ThreadPanel } from './components/ThreadPanel';
 import { MeetingsPage } from './components/MeetingsPage';
+import { MeetingRecords } from './components/MeetingRecords';
 import { PAGES, type PageKey } from './pages';
 
 export default function App() {
@@ -21,7 +22,8 @@ export default function App() {
     <div className="app">
       <Sidebar page={page} setPage={setPage} />
       {page === 'dashboard' && <MainContent />}
-      {page !== 'dashboard' && PAGES[page].embedPath && (
+      {page === 'meetings' && <MeetingRecords />}
+      {page !== 'dashboard' && page !== 'meetings' && PAGES[page].embedPath && (
         <MeetingsPage
           pageLabel={PAGES[page].label}
           embedPath={PAGES[page].embedPath!}
