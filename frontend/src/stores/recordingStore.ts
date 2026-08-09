@@ -64,7 +64,7 @@ interface RecordingState {
   _stopServerSession: () => void;
 }
 
-const API_BASE = '/meetings/api';
+const API_BASE = `${import.meta.env.VITE_API_BASE || ''}/meetings/api`;
 
 function formatTime(sec: number): string {
   const m = Math.floor(sec / 60);
