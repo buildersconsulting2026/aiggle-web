@@ -22,9 +22,6 @@ function formatTime(sec: number): string {
 }
 
 export function RecorderPanel({ onCompleted }: { onCompleted: () => void }) {
-  // ─── 상태 ───
-  const [showConfirm, setShowConfirm] = useState(false);
-
   // ─── 녹음 상태 ───
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -145,7 +142,6 @@ export function RecorderPanel({ onCompleted }: { onCompleted: () => void }) {
     }
     setRecording(false);
     setPaused(false);
-    setShowConfirm(true); // 확인 다이얼로그 표시
   }, []);
 
   // ─── 녹음 취소 ───
@@ -295,21 +291,20 @@ export function RecorderPanel({ onCompleted }: { onCompleted: () => void }) {
           </div>
         </div>
       ) : audioBlob ? (
-        /* ─── 녹음 완료 후 미리보기 ─── */
-        <div className="recorder-preview">
-          <div className="recorder-preview-header">
-            <span>🎙 녹음 완료</span>
-            <span className="recorder-preview-time">{formatTime(recordTime)}</span>
-          </div>
+        /* ─── 녹음 완료 후 확인 다이얼로그 ─── */
+        <div className="recorder-confirm">
+          <div className="recorder-confirm-icon">🎙️</div>
+          <div className="recorder-confirm-title">녹음이 완료됐어요</div>
+          <div className="recorder-confirm-duration">길이: {formatTime(recordTime)}</div>
           {audioUrl && (
             <audio controls src={audioUrl} className="recorder-audio-preview" />
           )}
-          <div className="recorder-controls">
+          <div className="recorder-confirm-actions">
             <button className="btn btn-rec-upload" onClick={uploadRecording} disabled={!!job}>
-              📤 전사 및 요약 시작
+              ✅ 전사 및 요약 진행
             </button>
-            <button className="btn" onClick={discardRecording} disabled={!!job}>
-              ✕ 취소
+            <button className="btn btn-rec-discard" onClick={discardRecording} disabled={!!job}>
+              ✕ 다시 녹음 / 취소
             </button>
           </div>
         </div>

@@ -996,22 +996,38 @@ body {
   color: var(--text) !important;
 }
 
-/* 녹음 완료 미리보기 */
-.recorder-preview {
+/* 녹음 완료 확인 다이얼로그 */
+.recorder-confirm {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-.recorder-preview-header {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-size: 14px;
-  font-weight: 600;
+  gap: 12px;
+  padding: 12px 0;
 }
-.recorder-preview-time {
-  color: var(--accent-red);
+.recorder-confirm-icon {
+  font-size: 36px;
+}
+.recorder-confirm-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.recorder-confirm-duration {
+  font-size: 13px;
+  color: var(--text-muted);
   font-family: monospace;
+}
+.recorder-confirm-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+.btn-rec-discard {
+  background: var(--surface-active) !important;
+  color: var(--text-muted) !important;
+}
+.btn-rec-discard:hover {
+  color: var(--accent-red) !important;
 }
 .recorder-audio-preview {
   width: 100%;
