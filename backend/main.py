@@ -897,6 +897,41 @@ async def stop_discord_gateway():
     discord_gateway.stop()
 
 
+@app.post("/api/import")
+def import_data(payload: dict):
+    """로컬 DB 데이터를 Render DB로 일괄 가져오기"""
+    db = SessionLocal()
+    try:
+        # 기존 데이터 삭제
+        db.query(Message).delete()
+        db.query(Room).delete()
+        db.query(User).delete()
+        db.commit()
+
+        for u in payload.get("users", []):
+            db.add(User(id=u["id"], name=u["name"], role=u["role"], avatar_color=u["avatar_color"]))
+        for r in payload.get("rooms", []):
+            db.add(Room(id=r["id"], name=r["name"], type=r["type"], discord_channel_id=r.get("discord_channel_id")))
+        for m in payload.get("messages", []):
+            created = m.get("created_at")
+            if created and isinstance(created, str):
+                created = datetime.fromisoformat(created)
+            db.add(Message(
+                id=m["id"], room_id=m["room_id"], user_id=m["user_id"],
+                content=m["content"], parent_id=m.get("parent_id"),
+                mentions=m.get("mentions", []), created_at=created,
+                discord_message_id=m.get("discord_message_id"),
+                origin=m.get("origin", "web"),
+            ))
+        db.commit()
+        return {"ok": True, "users": len(payload.get("users", [])), "rooms": len(payload.get("rooms", [])), "messages": len(payload.get("messages", []))}
+    except Exception as e:
+        db.rollback()
+        return {"ok": False, "error": str(e)}
+    finally:
+        db.close()
+
+
 @app.get("/api/ai/status")
 def ai_status():
     """AI 연결 상태 확인"""
