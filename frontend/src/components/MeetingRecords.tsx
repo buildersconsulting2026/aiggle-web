@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useChatStore } from '../stores/chatStore';
+import { RecorderPanel } from './RecorderPanel';
 
 // ─── Types ───
 interface MeetingListItem {
@@ -104,6 +105,11 @@ export function MeetingRecords() {
           </div>
         </div>
         <div className="meeting-list-container">
+          {/* 녹음/업로드 패널 */}
+          <div className="recorder-section">
+            <RecorderPanel onCompleted={loadMeetings} />
+          </div>
+
           {loading ? (
             <div className="meeting-placeholder">
               <div className="meetings-spinner" />

@@ -871,3 +871,237 @@ body {
   font-size: 16px;
   margin-top: 12px;
 }
+
+/* ─── Recorder Panel ─── */
+.recorder-section {
+  max-width: 800px;
+  margin-bottom: 24px;
+}
+.recorder-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+/* 기본 상태 */
+.recorder-default {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.btn-rec-start {
+  background: var(--accent-red) !important;
+  color: #fff !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  padding: 12px 28px !important;
+  border-radius: 24px !important;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-rec-start:hover {
+  background: #d73636 !important;
+  transform: scale(1.03);
+}
+.recorder-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 4px 0;
+}
+.recorder-divider::before,
+.recorder-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.recorder-divider span {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.recorder-dropzone {
+  width: 100%;
+  padding: 20px;
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.recorder-dropzone:hover,
+.recorder-dropzone.active {
+  border-color: var(--accent);
+  background: rgba(88, 166, 255, 0.05);
+}
+.recorder-dropzone-icon {
+  font-size: 28px;
+}
+.recorder-dropzone-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* 녹음 중 */
+.recorder-active {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.recorder-pulse-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.recorder-pulse {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.recorder-pulse.paused {
+  animation: none;
+  background: var(--accent-orange);
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgba(248,81,73,0.4); }
+  50% { opacity: 0.7; transform: scale(1.2); box-shadow: 0 0 0 8px rgba(248,81,73,0); }
+}
+.recorder-time {
+  font-size: 28px;
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 2px;
+}
+.recorder-controls {
+  display: flex;
+  gap: 8px;
+}
+.btn-rec-pause {
+  background: var(--accent-orange) !important;
+  color: #fff !important;
+}
+.btn-rec-stop {
+  background: var(--surface-active) !important;
+  color: var(--text) !important;
+}
+
+/* 녹음 완료 미리보기 */
+.recorder-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.recorder-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+.recorder-preview-time {
+  color: var(--accent-red);
+  font-family: monospace;
+}
+.recorder-audio-preview {
+  width: 100%;
+  height: 36px;
+}
+.btn-rec-upload {
+  background: var(--accent-green) !important;
+  color: var(--bg) !important;
+  font-weight: 700 !important;
+}
+
+/* 작업 상태 카드 */
+.job-status-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+.job-status-card.done {
+  border-color: var(--accent-green);
+}
+.job-status-card.error {
+  border-color: var(--accent-red);
+}
+.job-status-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.job-status-icon {
+  font-size: 18px;
+}
+.job-status-filename {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.job-status-size {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.job-progress-bar {
+  height: 8px;
+  background: var(--surface-active);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.job-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+.job-progress-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.job-done-msg {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--accent-green);
+  text-align: center;
+}
+.job-error-msg {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--accent-red);
+  text-align: center;
+}
+.recorder-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+}
+.recorder-error {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid var(--accent-red);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--accent-red);
+}
