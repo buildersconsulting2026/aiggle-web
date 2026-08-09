@@ -24,4 +24,5 @@ export interface Message {
   mentions: string[];
   created_at: string | null;
   reply_count: number;
+  origin?: string;
 }

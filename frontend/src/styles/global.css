@@ -156,6 +156,12 @@ body {
   padding: 8px;
   border-top: 1px solid var(--border);
 }
+.sidebar-version {
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 4px 0 2px;
+}
 .user-chip {
   display: flex;
   align-items: center;
@@ -734,6 +740,80 @@ body {
   color: var(--accent);
 }
 
+/* 카드 내부 버튼/액션 */
+.meeting-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  opacity: 0.5;
+}
+.meeting-card:hover .btn-icon {
+  opacity: 1;
+}
+.btn-icon:hover {
+  background: var(--surface-active);
+}
+
+/* 삭제 확인 모드 */
+.meeting-card-confirm-delete {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+.confirm-delete-text {
+  font-size: 14px;
+  color: var(--accent-red);
+  font-weight: 600;
+}
+.confirm-delete-actions {
+  display: flex;
+  gap: 8px;
+}
+.btn-danger-sm {
+  background: var(--accent-red) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+
+/* 이름 수정 모드 */
+.meeting-card-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0;
+}
+.meeting-edit-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+.meeting-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+.btn-primary-sm {
+  background: var(--accent) !important;
+  color: var(--bg) !important;
+  font-weight: 600 !important;
+}
+
 /* 상세 페이지 */
 .meeting-detail-content {
   max-width: 860px;
@@ -1120,4 +1200,160 @@ body {
   border-radius: 8px;
   font-size: 13px;
   color: var(--accent-red);
+}
+
+/* ─── 사이드바 녹음 중 표시기 ─── */
+.sidebar-recording-indicator {
+  margin: 4px 8px;
+  padding: 8px 12px;
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid rgba(248, 81, 73, 0.3);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+  transition: all 0.15s;
+}
+.sidebar-recording-indicator:hover {
+  background: rgba(248, 81, 73, 0.2);
+}
+.rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-red);
+  animation: pulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.rec-dot.paused {
+  animation: none;
+  background: var(--accent-orange);
+}
+.rec-dot.processing {
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.btn-sm {
+  font-size: 12px !important;
+  padding: 4px 10px !important;
+}
+
+/* 다른 팀원 녹음 표시 */
+.sidebar-other-recording {
+  margin: 4px 8px;
+  padding: 8px 12px;
+  background: rgba(188, 140, 255, 0.1);
+  border: 1px solid rgba(188, 140, 255, 0.3);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sidebar-other-recording:hover {
+  background: rgba(188, 140, 255, 0.2);
+}
+.other-rec-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.other-rec-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.other-rec-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 회의록 카드 녹음자 표시 */
+.meeting-card-recorder {
+  font-size: 12px;
+  color: var(--accent-purple);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* AI status badge */
+.ai-status-badge {
+  font-size: 12px;
+  color: #6e40c9;
+  background: #6e40c922;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* AI thinking indicator */
+.ai-thinking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  color: #6e40c9;
+  font-size: 13px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* ─── 멘션 자동완성 드롭다운 ─── */
+.mention-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 100;
+  padding: 4px;
+}
+
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.mention-item.active {
+  background: var(--surface-active);
+}
+
+.mention-item:hover {
+  background: var(--surface-hover);
+}
+
+.mention-item-name {
+  font-weight: 500;
+  color: var(--text);
+  flex: 1;
+}
+
+/* avatar-sm for mention dropdown */
+.avatar.avatar-sm {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  flex-shrink: 0;
 }

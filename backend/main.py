@@ -14,6 +14,7 @@ from datetime import datetime
 import json
 import os
 import re
+import asyncio
 import httpx
 import urllib.parse
 
@@ -276,8 +277,28 @@ async def ws_endpoint(ws: WebSocket, room_id: int):
                     db.commit()
                     resp["discord_message_id"] = discord_msg_id
 
+            # AI 멘션 감지 → GLM 응답 생성
+            should_trigger_ai = bool(AI_TRIGGER_PATTERNS.search(data["content"]))
+
             db.close()
             await manager.broadcast(room_id, resp)
+
+            # AI 응답 (비동기, 브로드캐스트 후 처리)
+            if should_trigger_ai:
+                db2 = SessionLocal()
+                ai_resp = await handle_ai_message(db2, room_id, sender.name, data["content"])
+                # AI 응답을 Discord로도 전송
+                if room and room.discord_channel_id:
+                    discord_id = await send_to_discord(room, "GLM", ai_resp["content"], [])
+                    if discord_id:
+                        # discord_message_id 업데이트
+                        ai_msg = db2.query(Message).filter(Message.id == ai_resp["id"]).first()
+                        if ai_msg:
+                            ai_msg.discord_message_id = discord_id
+                            db2.commit()
+                            ai_resp["discord_message_id"] = discord_id
+                db2.close()
+                await manager.broadcast(room_id, ai_resp)
 
     except WebSocketDisconnect:
         manager.disconnect(ws, room_id)
@@ -515,6 +536,375 @@ async def send_to_discord(
     except Exception as e:
         print(f"Discord send error: {e}")
         return None
+
+
+# ─── AI (GLM) 연동 ───
+GLM_API_KEY = os.environ.get("GLM_CUSTOM_API_KEY", "")
+# .env에서 로드
+if not GLM_API_KEY:
+    hermes_env = os.path.expanduser("~/.hermes/.env")
+    if os.path.exists(hermes_env):
+        for line in open(hermes_env):
+            line = line.strip()
+            if line.startswith("GLM_CUSTOM_API_KEY="):
+                GLM_API_KEY = line.split("=", 1)[1]
+                break
+
+GLM_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
+GLM_MODEL = os.environ.get("GLM_MODEL", "glm-5.2")
+
+# GLM 사용자 (DB에 자동 생성됨)
+def get_or_create_glm_user(db) -> User:
+    """GLM 봇 사용자를 가져오거나 생성"""
+    user = db.query(User).filter(User.name == "GLM").first()
+    if not user:
+        user = User(name="GLM", role="ai", avatar_color="#6e40c9")
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user
+
+
+async def call_glm(messages_context: list[dict]) -> str:
+    """GLM API를 호출하여 AI 응답 생성.
+    messages_context: [{"role": "system"|"user"|"assistant", "content": "..."}]
+    """
+    if not GLM_API_KEY:
+        return "[AI 연결 오류: GLM API 키가 설정되지 않았습니다]"
+
+    headers = {
+        "Authorization": f"Bearer {GLM_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": GLM_MODEL,
+        "messages": messages_context,
+        "max_tokens": 2000,
+        "temperature": 0.7,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{GLM_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return data["choices"][0]["message"]["content"].strip()
+            else:
+                print(f"GLM API error: {resp.status_code} {resp.text[:200]}")
+                return f"[AI 응답 오류: HTTP {resp.status_code}]"
+    except Exception as e:
+        print(f"GLM call error: {e}")
+        return f"[AI 연결 오류: {str(e)}]"
+
+
+# AI 트리거 감지: @GLM, @지엘엠, @glm 으로 시작하는 메시지
+AI_TRIGGER_PATTERNS = re.compile(r"@?(GLM|지엘엠|glm)\b", re.IGNORECASE)
+
+GLM_SYSTEM_PROMPT = """당신은 AIGGLE 팀의 AI 매니저 '지엘엠(GLM)'입니다.
+팀원: 담담(리더·백엔드), 삼쬐(디자인·기획·프론트), 짱구(마케팅 전략·브랜드), 프렌즈(콘텐츠·커뮤니티).
+역할: 결정 추적, 리마인드, 회의 안건 초안, 일정 관리.
+대화는 한국어 해요체를 사용하세요. (~해요, ~어요, ~세요 등 정중하고 친근한 체)
+간결하고 실용적으로 답변하세요."""
+
+
+async def handle_ai_message(db, room_id: int, sender_name: str, content: str, parent_id: int = None):
+    """사용자 메시지가 AI를 향한 경우 GLM 응답을 생성하여 채팅방에 게시."""
+    # 컨텍스트 구성: 시스템 프롬프트 + 최근 대화 내역
+    recent = db.query(Message).filter(
+        Message.room_id == room_id
+    ).order_by(Message.created_at.desc()).limit(10).all()
+    recent.reverse()  # 시간순
+
+    context = [{"role": "system", "content": GLM_SYSTEM_PROMPT}]
+    for m in recent:
+        if m.user and m.user.name == "GLM":
+            context.append({"role": "assistant", "content": m.content})
+        else:
+            speaker = m.user.name if m.user else "사용자"
+            context.append({"role": "user", "content": f"[{speaker}] {m.content}"})
+
+    # AI 응답 생성
+    ai_response = await call_glm(context)
+
+    # GLM 사용자로 메시지 저장
+    glm_user = get_or_create_glm_user(db)
+    ai_msg = Message(
+        room_id=room_id,
+        user_id=glm_user.id,
+        content=ai_response,
+        parent_id=parent_id,  # 원 메시지에 답글 형태
+        mentions=[],
+        origin="ai",
+    )
+    db.add(ai_msg)
+    db.commit()
+    db.refresh(ai_msg)
+
+    return msg_to_dict(db, ai_msg)
+
+
+@app.post("/api/ai/chat")
+async def ai_chat_endpoint(request: Request):
+    """직접 AI와 대화하는 REST 엔드포인트 (채팅창 UI용)"""
+    data = await request.json()
+    messages = data.get("messages", [])
+    context = [{"role": "system", "content": GLM_SYSTEM_PROMPT}] + messages
+    response = await call_glm(context)
+    return {"response": response}
+
+
+# ─── Discord Gateway 실시간 동기화 ───
+import websockets
+
+class DiscordGatewayClient:
+    """Discord Gateway WebSocket에 접속하여 실시간 메시지를 수신."""
+    def __init__(self):
+        self.running = False
+        self.ws = None
+        self.heartbeat_interval = 30
+        self.seq = None
+        self.session_id = None
+
+    async def start(self):
+        if self.running or not DISCORD_BOT_TOKEN:
+            return
+        self.running = True
+        # 메인 이벤트 루프에서 백그라운드로 실행
+        asyncio.create_task(self._run())
+
+    def stop(self):
+        self.running = False
+
+    async def _run(self):
+        while self.running:
+            try:
+                await self._connect_and_listen()
+            except Exception as e:
+                print(f"Discord Gateway error: {e}")
+                if self.running:
+                    await asyncio.sleep(5)  # 재연결 대기
+
+    async def _connect_and_listen(self):
+        # Gateway URL 조회
+        resp = httpx.get(
+            "https://discord.com/api/v10/gateway/bot",
+            headers={"Authorization": f"Bot {DISCORD_BOT_TOKEN}"},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            print(f"Gateway URL fetch failed: {resp.status_code}")
+            return
+        gateway_url = resp.json()["url"] + "/?v=10&encoding=json"
+
+        async with websockets.connect(gateway_url) as ws:
+            self.ws = ws
+            # HELLO 대기
+            hello = json.loads(await ws.recv())
+            self.heartbeat_interval = hello["d"]["heartbeat_interval"] / 1000
+
+            # 하트비트 태스크 시작
+            heartbeat_task = asyncio.create_task(self._heartbeat(ws))
+
+            # IDENTIFY 전송
+            identify = {
+                "op": 2,
+                "d": {
+                    "token": DISCORD_BOT_TOKEN,
+                    "intents": (1 << 9) | (1 << 15),  # GUILD_MESSAGES | MESSAGE_CONTENT
+                    "properties": {
+                        "os": "linux",
+                        "browser": "aiggle-web",
+                        "device": "aiggle-web",
+                    },
+                },
+            }
+            await ws.send(json.dumps(identify))
+
+            # 이벤트 수신 루프
+            async for raw in ws:
+                data = json.loads(raw)
+                op = data.get("op")
+                t = data.get("t")
+                d = data.get("d", {})
+
+                if op == 0:  # Dispatch
+                    self.seq = data.get("s")
+                    if t == "READY":
+                        self.session_id = d.get("session_id")
+                        print(f"Discord Gateway connected as {d.get('user', {}).get('username', '?')}")
+                    elif t == "MESSAGE_CREATE":
+                        await self._on_message_create(d)
+
+                elif op == 11:  # Heartbeat ACK
+                    pass
+
+            heartbeat_task.cancel()
+
+    async def _heartbeat(self, ws):
+        while True:
+            await asyncio.sleep(self.heartbeat_interval)
+            try:
+                await ws.send(json.dumps({"op": 1, "d": self.seq}))
+            except Exception:
+                break
+
+    async def _on_message_create(self, d: dict):
+        """Discord에서 새 메시지가 오면 DB에 저장하고 웹으로 브로드캐스트."""
+        msg_id = d.get("id", "")
+        channel_id = d.get("channel_id", "")
+        content = d.get("content", "").strip()
+        if not content:
+            return
+
+        # AIGGLE 채널 매핑
+        room_db_id = DISCORD_ID_MAP.get(channel_id)
+        if not room_db_id:
+            return
+
+        db = SessionLocal()
+
+        # 중복 체크
+        existing = db.query(Message).filter(Message.discord_message_id == msg_id).first()
+        if existing:
+            db.close()
+            return
+
+        # 봇이 보낸 [이름] 형식 메시지는 스킵 (되먹임 방지)
+        author = d.get("author", {})
+        if author.get("bot"):
+            if content.startswith("[") and "] " in content:
+                db.close()
+                return
+
+        # 작성자 매핑
+        discord_username = author.get("username", "")
+        discord_global_name = author.get("global_name", "")
+        aiggle_name = DISCORD_NAME_MAP.get(discord_username) or \
+                      DISCORD_NAME_MAP.get(discord_global_name) or \
+                      discord_global_name or discord_username
+
+        user = db.query(User).filter(User.name == aiggle_name).first()
+        if not user:
+            if author.get("bot"):
+                user = db.query(User).filter(User.name == "GLM").first()
+            if not user:
+                user = User(name=aiggle_name, role="member", avatar_color="#8b949e")
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+
+        # 멘션 파싱
+        mentions = []
+        for mention in d.get("mentions", []):
+            mentioned_name = mention.get("global_name") or mention.get("username", "")
+            if mentioned_name:
+                mentions.append(mentioned_name)
+
+        # 답글 매핑
+        parent_db_id = None
+        msg_ref = d.get("message_reference")
+        if msg_ref and msg_ref.get("message_id"):
+            ref_discord_id = msg_ref["message_id"]
+            parent_msg = db.query(Message).filter(
+                Message.discord_message_id == ref_discord_id
+            ).first()
+            if parent_msg:
+                parent_db_id = parent_msg.id
+
+        msg = Message(
+            room_id=room_db_id,
+            user_id=user.id,
+            content=content,
+            parent_id=parent_db_id,
+            mentions=mentions,
+            discord_message_id=msg_id,
+            origin="discord",
+            created_at=datetime.fromisoformat(
+                d["timestamp"].replace("Z", "+00:00")
+            ).replace(tzinfo=None) if d.get("timestamp") else datetime.utcnow(),
+        )
+        db.add(msg)
+        db.commit()
+        db.refresh(msg)
+
+        resp = msg_to_dict(db, msg)
+        db.close()
+
+        # 웹 WebSocket으로 브로드캐스트
+        await manager.broadcast(room_db_id, resp)
+        print(f"Discord→Web synced: [{aiggle_name}] {content[:50]}")
+
+        # AI 트리거 감지 (Discord에서 @GLM 호출 시)
+        if AI_TRIGGER_PATTERNS.search(content):
+            db2 = SessionLocal()
+            await handle_ai_message(db2, room_db_id, aiggle_name, content)
+            resp2 = msg_to_dict(db2, msg)
+            # AI 응답을 Discord로도 전송
+            room = db2.query(Room).filter(Room.id == room_db_id).first()
+            if room and room.discord_channel_id:
+                await send_to_discord(room, "GLM", ai_response, [])
+            await manager.broadcast(room_db_id, resp2)
+            db2.close()
+
+
+discord_gateway = DiscordGatewayClient()
+
+
+def auto_seed():
+    """서버 시작 시 DB가 비어있으면 기본 데이터 삽입 (Render 재시작 대응)"""
+    db = SessionLocal()
+    if db.query(User).count() == 0:
+        users = [
+            ("담담", "leader", "#58a6ff"),
+            ("삼쬐", "designer", "#bc8cff"),
+            ("짱구", "marketer", "#f778ba"),
+            ("프렌즈", "content", "#3fb950"),
+            ("GLM", "ai", "#6e40c9"),
+        ]
+        for name, role, color in users:
+            db.add(User(name=name, role=role, avatar_color=color))
+
+        rooms = [
+            ("일반", "channel", "1521021005206655047"),
+            ("공유", "channel", "1523323184982786269"),
+            ("개발", "channel", "1523214326197125251"),
+            ("PM 브리핑", "channel", "1526550777919963146"),
+        ]
+        for name, rtype, discord_id in rooms:
+            db.add(Room(name=name, type=rtype, discord_channel_id=discord_id))
+
+        db.commit()
+        print("✅ Auto-seed: 5 users, 4 rooms inserted")
+    db.close()
+
+
+@app.on_event("startup")
+async def start_discord_gateway():
+    """서버 시작 시 DB 시드 + Discord Gateway 실시간 리스너 구동"""
+    auto_seed()
+    if DISCORD_BOT_TOKEN:
+        await discord_gateway.start()
+    else:
+        print("⚠️ DISCORD_BOT_TOKEN not set — Discord gateway skipped")
+
+
+@app.on_event("shutdown")
+async def stop_discord_gateway():
+    discord_gateway.stop()
+
+
+@app.get("/api/ai/status")
+def ai_status():
+    """AI 연결 상태 확인"""
+    return {
+        "connected": bool(GLM_API_KEY),
+        "model": GLM_MODEL,
+        "gateway_running": discord_gateway.running,
+    }
 
 
 # ─── whisper-serve 프록시 (회의록/음성요약) ───

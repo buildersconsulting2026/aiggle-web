@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { RecorderPanel } from './RecorderPanel';
+import { useRecordingStore } from '../stores/recordingStore';
 
 // ─── Types ───
 interface MeetingListItem {
@@ -9,6 +10,10 @@ interface MeetingListItem {
   date: string;
   duration_sec: number;
   chunks: number;
+  title?: string;
+  recorder?: string;
+  device?: string;
+  source?: string;
 }
 
 interface MeetingDetail {
@@ -19,6 +24,10 @@ interface MeetingDetail {
   chunks: number;
   transcript: string;
   analysis: string;
+  title?: string;
+  recorder?: string;
+  device?: string;
+  source?: string;
   chunk_details?: Array<{
     chunk: number;
     start: number;
@@ -45,14 +54,26 @@ function formatDate(iso: string): string {
   }
 }
 
+function getDisplayTitle(m: { title?: string; filename?: string; date?: string }): string {
+  if (m.title && m.title.trim()) return m.title;
+  return m.filename || '제목 없음';
+}
+
 export function MeetingRecords() {
   const { toggleChat, chatOpen } = useChatStore();
+  const { jobJustCompleted } = useRecordingStore();
   const [meetings, setMeetings] = useState<MeetingListItem[]>([]);
   const [selected, setSelected] = useState<MeetingDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [view, setView] = useState<'summary' | 'transcript'>('summary');
   const [error, setError] = useState<string | null>(null);
+
+  // 삭제/이름수정 상태
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
 
   // 회의록 목록 로드
   const loadMeetings = useCallback(async () => {
@@ -74,6 +95,18 @@ export function MeetingRecords() {
     loadMeetings();
   }, [loadMeetings]);
 
+  // job 완료 시 자동 새로고침 (다른 탭에 있다가 돌아와도 동작)
+  const prevCompletedRef = useRef(false);
+  useEffect(() => {
+    if (jobJustCompleted && !prevCompletedRef.current) {
+      prevCompletedRef.current = true;
+      loadMeetings();
+    }
+    if (!jobJustCompleted) {
+      prevCompletedRef.current = false;
+    }
+  }, [jobJustCompleted, loadMeetings]);
+
   // 회의록 상세 로드
   const loadDetail = useCallback(async (id: string) => {
     setDetailLoading(true);
@@ -89,6 +122,52 @@ export function MeetingRecords() {
     } finally {
       setDetailLoading(false);
     }
+  }, []);
+
+  // 회의록 삭제
+  const handleDelete = useCallback(async (id: string) => {
+    setEditLoading(true);
+    try {
+      const resp = await fetch(`${API_BASE}/meeting/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      if (!resp.ok) throw new Error('삭제 실패');
+      setDeletingId(null);
+      await loadMeetings();
+    } catch (e) {
+      setError('삭제 중 오류가 발생했어요.');
+    } finally {
+      setEditLoading(false);
+    }
+  }, [loadMeetings]);
+
+  // 회의록 이름 수정
+  const handleRename = useCallback(async (id: string) => {
+    const title = editValue.trim();
+    if (!title) return;
+    setEditLoading(true);
+    try {
+      const resp = await fetch(`${API_BASE}/meeting/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      if (!resp.ok) throw new Error('수정 실패');
+      setEditingId(null);
+      setEditValue('');
+      await loadMeetings();
+    } catch (e) {
+      setError('이름 수정 중 오류가 발생했어요.');
+    } finally {
+      setEditLoading(false);
+    }
+  }, [editValue, loadMeetings]);
+
+  // 이름 수정 시작
+  const startRename = useCallback((m: MeetingListItem) => {
+    setEditingId(m.id);
+    setEditValue(m.title || '');
+    setDeletingId(null);
   }, []);
 
   // ─── 목록 화면 ───
@@ -133,24 +212,83 @@ export function MeetingRecords() {
             </div>
           ) : (
             <div className="meeting-list">
-              {meetings.map((m, i) => (
-                <div
-                  key={m.id}
-                  className="meeting-card"
-                  onClick={() => loadDetail(m.id)}
-                >
-                  <div className="meeting-card-header">
-                    <span className="meeting-card-date">{formatDate(m.date)}</span>
-                    <span className="meeting-card-duration">⏱ {formatDuration(m.duration_sec)}</span>
-                  </div>
-                  <div className="meeting-card-body">
-                    <span className="meeting-card-title">회의 녹음본 #{meetings.length - i}</span>
-                    <span className="meeting-card-filename">{m.filename}</span>
-                  </div>
-                  <div className="meeting-card-footer">
-                    <span className="meeting-card-badge">{m.chunks}개 구간 전사</span>
-                    <span className="meeting-card-arrow">열기 →</span>
-                  </div>
+              {meetings.map((m) => (
+                <div key={m.id} className="meeting-card">
+                  {/* 삭제 확인 모드 */}
+                  {deletingId === m.id ? (
+                    <div className="meeting-card-confirm-delete">
+                      <span className="confirm-delete-text">정말 삭제할까요?</span>
+                      <div className="confirm-delete-actions">
+                        <button
+                          className="btn btn-danger-sm"
+                          onClick={(e) => { e.stopPropagation(); handleDelete(m.id); }}
+                          disabled={editLoading}
+                        >삭제</button>
+                        <button
+                          className="btn"
+                          onClick={(e) => { e.stopPropagation(); setDeletingId(null); }}
+                          disabled={editLoading}
+                        >취소</button>
+                      </div>
+                    </div>
+                  ) : editingId === m.id ? (
+                    /* 이름 수정 모드 */
+                    <div className="meeting-card-edit" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        className="meeting-edit-input"
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        placeholder="회의록 이름"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRename(m.id);
+                          if (e.key === 'Escape') { setEditingId(null); setEditValue(''); }
+                        }}
+                      />
+                      <div className="meeting-edit-actions">
+                        <button
+                          className="btn btn-primary-sm"
+                          onClick={() => handleRename(m.id)}
+                          disabled={editLoading || !editValue.trim()}
+                        >저장</button>
+                        <button
+                          className="btn"
+                          onClick={() => { setEditingId(null); setEditValue(''); }}
+                          disabled={editLoading}
+                        >취소</button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* 기본 카드 */
+                    <div className="meeting-card-main" onClick={() => loadDetail(m.id)}>
+                      <div className="meeting-card-header">
+                        <span className="meeting-card-date">{formatDate(m.date)}</span>
+                        <span className="meeting-card-duration">⏱ {formatDuration(m.duration_sec)}</span>
+                      </div>
+                      <div className="meeting-card-body">
+                        <span className="meeting-card-title">{getDisplayTitle(m)}</span>
+                        {m.recorder && m.recorder !== '알 수 없음' && (
+                          <span className="meeting-card-recorder">🎙 {m.recorder}</span>
+                        )}
+                      </div>
+                      <div className="meeting-card-footer">
+                        <span className="meeting-card-badge">{m.chunks}개 구간 전사</span>
+                        <div className="meeting-card-actions">
+                          <button
+                            className="btn-icon"
+                            title="이름 수정"
+                            onClick={(e) => { e.stopPropagation(); startRename(m); }}
+                          >✏️</button>
+                          <button
+                            className="btn-icon"
+                            title="삭제"
+                            onClick={(e) => { e.stopPropagation(); setDeletingId(m.id); }}
+                          >🗑️</button>
+                          <span className="meeting-card-arrow">열기 →</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -167,7 +305,7 @@ export function MeetingRecords() {
         <button className="btn" onClick={() => setSelected(null)}>← 목록으로</button>
         {selected && (
           <span className="breadcrumb" style={{ marginLeft: 12 }}>
-            회의록 / <strong>{formatDate(selected.date)}</strong>
+            회의록 / <strong>{getDisplayTitle(selected)}</strong>
           </span>
         )}
         <div className="actions">
@@ -203,7 +341,12 @@ export function MeetingRecords() {
                   <span>📅 {formatDate(selected.date)}</span>
                   <span>⏱ {formatDuration(selected.duration_sec)}</span>
                   <span>🎙 {selected.chunks}개 구간</span>
-                  <span>📁 {selected.filename}</span>
+                  {selected.recorder && selected.recorder !== '알 수 없음' && (
+                    <span>👤 {selected.recorder}</span>
+                  )}
+                  {selected.device && selected.device !== '알 수 없음' && (
+                    <span>💻 {selected.device}</span>
+                  )}
                 </div>
                 <div className="meeting-analysis">
                   {selected.analysis ? (

@@ -36,7 +36,6 @@ interface ChatState {
   connectWS: (roomId: number) => void;
   disconnectWS: () => void;
   sendMessage: (content: string, parentId?: number | null, mentions?: string[]) => void;
-
   // UI
   sidebarOpen: boolean;
   chatOpen: boolean;
@@ -48,6 +47,11 @@ interface ChatState {
   syncing: boolean;
   checkDiscord: () => Promise<void>;
   syncDiscord: (roomId?: number) => Promise<void>;
+
+  // AI
+  aiConnected: boolean | null;
+  aiThinking: boolean;
+  checkAI: () => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -133,6 +137,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     ws.onmessage = (ev) => {
       const msg: Message = JSON.parse(ev.data);
       const { messages, threadMessages, threadParent } = get();
+
+      // GLM 메시지 수신 시 thinking 해제
+      if (msg.user_name === 'GLM' || msg.user_role === 'ai') {
+        set({ aiThinking: false });
+      }
+
       // 스레드 메시지면 threadMessages에 추가
       if (msg.parent_id) {
         if (threadParent && msg.parent_id === threadParent.id) {
@@ -166,6 +176,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendMessage: (content: string, parentId: number | null = null, mentions: string[] = []) => {
     const { ws, currentUser } = get();
     if (!ws || !currentUser || !content.trim()) return;
+
+    // AI 트리거 감지 → thinking 상태
+    const triggersAI = /@?(GLM|지엘엠|glm)\b/i.test(content);
+    if (triggersAI) {
+      set({ aiThinking: true });
+    }
+
     // WS가 끊어져 있으면 재연결 후 전송
     if (ws.readyState !== WebSocket.OPEN) {
       const roomId = get().currentRoom;
@@ -230,6 +247,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.error('Discord sync failed:', e);
     } finally {
       set({ syncing: false });
+    }
+  },
+
+  // AI
+  aiConnected: null,
+  aiThinking: false,
+
+  checkAI: async () => {
+    try {
+      const res = await fetch(`${API}/ai/status`);
+      const data = await res.json();
+      set({ aiConnected: data.connected === true });
+    } catch {
+      set({ aiConnected: false });
     }
   },
 }));

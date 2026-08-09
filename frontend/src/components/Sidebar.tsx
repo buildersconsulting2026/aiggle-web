@@ -1,4 +1,5 @@
 import { useChatStore } from '../stores/chatStore';
+import { useRecordingStore, formatTime } from '../stores/recordingStore';
 import { PAGES, type PageKey } from '../pages';
 
 interface SidebarProps {
@@ -8,6 +9,7 @@ interface SidebarProps {
 
 export function Sidebar({ page, setPage }: SidebarProps) {
   const { rooms, currentRoom, setCurrentRoom, users, currentUser } = useChatStore();
+  const { recording, paused, recordTime, job, otherRecordings } = useRecordingStore();
 
   return (
     <div className="sidebar">
@@ -63,6 +65,36 @@ export function Sidebar({ page, setPage }: SidebarProps) {
         ))}
       </div>
 
+      {/* 다른 팀원 녹음 중 표시 */}
+      {otherRecordings.map((r) => (
+        <div key={r.session_id} className="sidebar-other-recording" onClick={() => setPage('meetings')}>
+          <div className={`rec-dot ${r.status === 'paused' ? 'paused' : ''}`} />
+          <div className="other-rec-info">
+            <span className="other-rec-name">{r.recorder}님 녹음 중</span>
+            <span className="other-rec-meta">
+              {formatTime(r.elapsed_sec)} · {r.device}
+            </span>
+          </div>
+        </div>
+      ))}
+
+      {/* 내 녹음 중 표시기 */}
+      {(recording || job) && (
+        <div className="sidebar-recording-indicator" onClick={() => setPage('meetings')}>
+          {recording ? (
+            <>
+              <div className={`rec-dot ${paused ? 'paused' : ''}`} />
+              <span>녹음 중 {formatTime(recordTime)}</span>
+            </>
+          ) : job && job.status !== 'done' && job.status !== 'error' ? (
+            <>
+              <div className="rec-dot processing" />
+              <span>전사 처리 중 {job.progress}%</span>
+            </>
+          ) : null}
+        </div>
+      )}
+
       <div className="sidebar-footer">
         {currentUser && (
           <div className="user-chip">
@@ -75,6 +107,7 @@ export function Sidebar({ page, setPage }: SidebarProps) {
             </div>
           </div>
         )}
+        <div className="sidebar-version">v{__APP_VERSION__} · {__BUILD_TIME__}</div>
       </div>
     </div>
   );
