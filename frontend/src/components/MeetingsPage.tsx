@@ -17,7 +17,7 @@ export function MeetingsPage({ pageLabel, embedPath }: MeetingsPageProps) {
 
   useEffect(() => {
     setLoading(true);
-    fetch(embedPath)
+    fetch(embedPath, { cache: 'no-store' })
       .then(res => setAvailable(res.ok))
       .catch(() => setAvailable(false))
       .finally(() => setLoading(false));

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { useChatStore } from './chatStore';
+import { apiFetch } from '../lib/apiBase';
 
 // ─── Types ───
 interface JobStatus {
@@ -64,7 +65,7 @@ interface RecordingState {
   _stopServerSession: () => void;
 }
 
-const API_BASE = `${import.meta.env.VITE_API_BASE || ''}/meetings/api`;
+const API = '/meetings/api';
 
 function formatTime(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -155,7 +156,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
 
       const recorderName = useChatStore.getState().currentUser?.name || '알 수 없음';
       const device = getDeviceInfo();
-      const sessionResp = await fetch(`${API_BASE}/recording/start`, {
+      const sessionResp = await apiFetch(`${API}/recording/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recorder: recorderName, device }),
@@ -252,7 +253,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
       formData.append('recorder', recorderName);
       formData.append('device', device);
 
-      const resp = await fetch(`${API_BASE}/upload`, {
+      const resp = await apiFetch(`${API}/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -274,7 +275,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
       // 폴링 — store 안에서 완전히 관리, 콜백 없음
       const pollId = setInterval(async () => {
         try {
-          const jobResp = await fetch(`${API_BASE}/job/${data.job_id}`);
+          const jobResp = await apiFetch(`${API}/job/${data.job_id}`);
           if (!jobResp.ok) return;
           const jobData: JobStatus = await jobResp.json();
           set({ job: jobData });
@@ -301,7 +302,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   _syncToServer: () => {
     const { _sessionId: sessionId, paused, recordTime } = get();
     if (!sessionId) return;
-    fetch(`${API_BASE}/recording/${sessionId}`, {
+    apiFetch(`${API}/recording/${sessionId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -314,7 +315,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
   _stopServerSession: () => {
     const { _sessionId: sessionId } = get();
     if (!sessionId) return;
-    fetch(`${API_BASE}/recording/${sessionId}`, { method: 'DELETE' }).catch(() => {});
+    apiFetch(`${API}/recording/${sessionId}`, { method: 'DELETE' }).catch(() => {});
     set({ _sessionId: null });
   },
 
@@ -323,7 +324,7 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     if (existing) clearInterval(existing);
     const pollOther = async () => {
       try {
-        const resp = await fetch(`${API_BASE}/recordings/active`);
+        const resp = await apiFetch(`${API}/recordings/active`);
         if (!resp.ok) return;
         const data = await resp.json();
         const mySession = get()._sessionId;

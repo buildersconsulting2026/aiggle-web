@@ -1,10 +1,8 @@
 import { create } from 'zustand';
 import type { User, Room, Message } from '../types';
+import { apiFetch, getWsBase, invalidateApiBase } from '../lib/apiBase';
 
-const API_BASE = import.meta.env.VITE_API_BASE || '';
-const API = `${API_BASE}/api`;
-const WS_HOST = API_BASE ? API_BASE.replace(/^https?:\/\//, '') : location.host;
-const WS_BASE = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${WS_HOST}/ws`;
+const API = '/api';
 
 interface ChatState {
   // Auth
@@ -33,7 +31,10 @@ interface ChatState {
   // WebSocket
   ws: WebSocket | null;
   connected: boolean;
+  _wsRetryTimer: ReturnType<typeof setTimeout> | null;
+  _wsRetries: number;
   connectWS: (roomId: number) => void;
+  _scheduleWsRetry: (roomId: number, attempt: number) => void;
   disconnectWS: () => void;
   sendMessage: (content: string, parentId?: number | null, mentions?: string[]) => void;
   // UI
@@ -58,7 +59,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentUser: null,
 
   login: async (name: string) => {
-    const res = await fetch(`${API}/users`, {
+    const res = await apiFetch(`${API}/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, role: 'member' }),
@@ -74,7 +75,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentRoom: null,
 
   fetchRooms: async () => {
-    const res = await fetch(`${API}/rooms`);
+    const res = await apiFetch(`${API}/rooms`);
     const rooms = await res.json();
     if (rooms.length > 0 && get().currentRoom === null) {
       set({ rooms, currentRoom: rooms[0].id });
@@ -99,13 +100,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   threadParent: null,
 
   fetchMessages: async (roomId: number) => {
-    const res = await fetch(`${API}/rooms/${roomId}/messages`);
+    const res = await apiFetch(`${API}/rooms/${roomId}/messages`);
     const messages = await res.json();
     set({ messages });
   },
 
   fetchThreads: async (parentId: number) => {
-    const res = await fetch(`${API}/messages/${parentId}/threads`);
+    const res = await apiFetch(`${API}/messages/${parentId}/threads`);
     const threads = await res.json();
     set({ threadMessages: threads });
   },
@@ -122,18 +123,53 @@ export const useChatStore = create<ChatState>((set, get) => ({
   users: [],
 
   fetchUsers: async () => {
-    const res = await fetch(`${API}/users`);
+    const res = await apiFetch(`${API}/users`);
     const users = await res.json();
     set({ users });
   },
 
   ws: null,
   connected: false,
+  _wsRetryTimer: null,
+  _wsRetries: 0,
 
-  connectWS: (roomId: number) => {
-    const ws = new WebSocket(`${WS_BASE}/${roomId}`);
-    ws.onopen = () => set({ connected: true });
-    ws.onclose = () => set({ connected: false });
+  _scheduleWsRetry: (roomId: number, attempt: number) => {
+    // 지수 백오프: 2s, 4s, 8s, ... 최대 30s
+    const delay = Math.min(2000 * Math.pow(2, attempt - 1), 30000);
+    const timer = setTimeout(async () => {
+      set({ _wsRetryTimer: null });
+      const { currentUser } = get();
+      if (!currentUser) return; // 로그아웃 상태면 재연결 안 함
+      try {
+        await get().connectWS(roomId);
+      } catch {
+        get()._scheduleWsRetry(roomId, attempt + 1);
+      }
+    }, delay);
+    set({ _wsRetryTimer: timer, _wsRetries: attempt });
+  },
+
+  connectWS: async (roomId: number) => {
+    // 기존 연결 정리 (재연결 타이머도)
+    const old = get().ws;
+    if (old) {
+      old.onclose = null;
+      old.close();
+    }
+    const oldTimer = get()._wsRetryTimer;
+    if (oldTimer) { clearTimeout(oldTimer); set({ _wsRetryTimer: null }); }
+
+    const wsBase = await getWsBase(); // 런타임 베이스 (자동 복구 반영)
+    const ws = new WebSocket(`${wsBase}/ws/${roomId}`);
+    ws.onopen = () => set({ connected: true, _wsRetries: 0 });
+    ws.onclose = () => {
+      set({ connected: false, ws: null });
+      // 비정상 종료(터널 교체 등): 캐시 무효화 + 지수 백오프 재연결
+      invalidateApiBase();
+      if (!get()._wsRetryTimer) {
+        get()._scheduleWsRetry(roomId, 1);
+      }
+    };
     ws.onmessage = (ev) => {
       const msg: Message = JSON.parse(ev.data);
       const { messages, threadMessages, threadParent } = get();
@@ -223,7 +259,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   checkDiscord: async () => {
     try {
-      const res = await fetch(`${API}/discord/status`);
+      const res = await apiFetch(`${API}/discord/status`);
       const data = await res.json();
       set({ discordConnected: data.connected === true });
     } catch {
@@ -237,7 +273,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const url = roomId
         ? `${API}/discord/sync?room_id=${roomId}`
         : `${API}/discord/sync`;
-      const res = await fetch(url, { method: 'POST' });
+      const res = await apiFetch(url, { method: 'POST' });
       const data = await res.json();
       if (data.synced > 0) {
         const { currentRoom } = get();
@@ -256,7 +292,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   checkAI: async () => {
     try {
-      const res = await fetch(`${API}/ai/status`);
+      const res = await apiFetch(`${API}/ai/status`);
       const data = await res.json();
       set({ aiConnected: data.connected === true });
     } catch {

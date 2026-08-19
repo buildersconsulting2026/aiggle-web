@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useChatStore } from '../stores/chatStore';
 import { RecorderPanel } from './RecorderPanel';
 import { useRecordingStore } from '../stores/recordingStore';
+import { apiFetch } from '../lib/apiBase';
 
 // ─── Types ───
 interface MeetingListItem {
@@ -36,7 +37,7 @@ interface MeetingDetail {
   }>;
 }
 
-const API_BASE = `${import.meta.env.VITE_API_BASE || ''}/meetings/api`;
+const API = '/meetings/api';
 
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -80,7 +81,7 @@ export function MeetingRecords() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch(`${API_BASE}/meetings`);
+      const resp = await apiFetch(`${API}/meetings`);
       if (!resp.ok) throw new Error('서버 응답 없음');
       const data = await resp.json();
       setMeetings(data.meetings || []);
@@ -113,7 +114,7 @@ export function MeetingRecords() {
     setSelected(null);
     setView('summary');
     try {
-      const resp = await fetch(`${API_BASE}/meeting/${encodeURIComponent(id)}`);
+      const resp = await apiFetch(`${API}/meeting/${encodeURIComponent(id)}`);
       if (!resp.ok) throw new Error('불러오기 실패');
       const data: MeetingDetail = await resp.json();
       setSelected(data);
@@ -128,7 +129,7 @@ export function MeetingRecords() {
   const handleDelete = useCallback(async (id: string) => {
     setEditLoading(true);
     try {
-      const resp = await fetch(`${API_BASE}/meeting/${encodeURIComponent(id)}`, {
+      const resp = await apiFetch(`${API}/meeting/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       });
       if (!resp.ok) throw new Error('삭제 실패');
@@ -147,7 +148,7 @@ export function MeetingRecords() {
     if (!title) return;
     setEditLoading(true);
     try {
-      const resp = await fetch(`${API_BASE}/meeting/${encodeURIComponent(id)}`, {
+      const resp = await apiFetch(`${API}/meeting/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title }),
