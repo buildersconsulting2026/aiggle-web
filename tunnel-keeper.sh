@@ -93,27 +93,27 @@ publish_url() {
   printf '{\n  "url": "%s",\n  "updated_at": "%s"\n}\n' \
     "$url" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$TUNNEL_JSON"
 
-  # git 커밋 (develop)
-  if git -C "$REPO_DIR" rev-parse --verify develop >/dev/null 2>&1; then
+  # git 커밋 (master — 2026-08-30 담담 결정: 운영계 단일 구조)
+  if git -C "$REPO_DIR" rev-parse --verify master >/dev/null 2>&1; then
     local branch
     branch=$(git -C "$REPO_DIR" branch --show-current)
-    if [ "$branch" != "develop" ]; then
-      git -C "$REPO_DIR" checkout develop >> /dev/null 2>&1
+    if [ "$branch" != "master" ]; then
+      git -C "$REPO_DIR" checkout master >> /dev/null 2>&1
     fi
     git -C "$REPO_DIR" add tunnel.json
     git -C "$REPO_DIR" -c user.name="tunnel-keeper" -c user.email="keeper@aiggle.local" \
       commit -m "chore(tunnel): update tunnel URL [skip ci]" >> /dev/null 2>&1
-    if ! git -C "$REPO_DIR" push origin develop >> /dev/null 2>&1; then
+    if ! git -C "$REPO_DIR" push origin master >> /dev/null 2>&1; then
       # 원격이 앞서 있으면 리베이스 후 재시도
-      git -C "$REPO_DIR" pull --rebase origin develop >> /dev/null 2>&1
-      git -C "$REPO_DIR" push origin develop >> /dev/null 2>&1
+      git -C "$REPO_DIR" pull --rebase origin master >> /dev/null 2>&1
+      git -C "$REPO_DIR" push origin master >> /dev/null 2>&1
     fi
-    if [ "$branch" != "develop" ] && [ -n "$branch" ]; then
+    if [ "$branch" != "master" ] && [ -n "$branch" ]; then
       git -C "$REPO_DIR" checkout "$branch" >> /dev/null 2>&1
     fi
     log "tunnel.json 발행 완료 → $url"
   else
-    log "⚠️ develop 브랜치 없음 — tunnel.json 로컬만 갱신"
+    log "⚠️ master 브랜치 없음 — tunnel.json 로컬만 갱신"
   fi
 
   # GitHub Actions 변수 갱신 (Pages 빌드용)

@@ -9,14 +9,15 @@
 //       3) Mac mini의 tunnel-keeper가 URL 변경 시 자동 발행
 //
 // 참고:
-//  - tunnel.json은 tunnel-keeper 스크립트가 develop 브랜치에 커밋함
+//  - tunnel.json은 tunnel-keeper 스크립트가 master 브랜치에 커밋함
+//  - 2026-08-30 담담 결정: 개발계 폐기, master 단일 구조
 //  - raw.githubusercontent.com은 5분 캐시 → 캐시 무시 쿼리스트링 사용
 // ─────────────────────────────────────────────────────────────
 
 import { create } from 'zustand';
 
 const GITHUB_RAW_BASE =
-  'https://raw.githubusercontent.com/buildersconsulting2026/aiggle-web/develop/tunnel.json';
+  'https://raw.githubusercontent.com/buildersconsulting2026/aiggle-web/master/tunnel.json';
 
 /** 빌드 시점에 주입된 기본값 (터널 URL 또는 '' = 같은 오리진) */
 const BUILTIN_BASE: string = import.meta.env.VITE_API_BASE || '';
